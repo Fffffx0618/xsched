@@ -30,6 +30,7 @@
 
 #define XSCHED_CUDA_SINGLE_STREAM_PER_PROCESS_ENV_NAME "XSCHED_CUDA_SINGLE_STREAM_PER_PROCESS" // = str[ON/OFF], default = OFF, if set to ON, each stream will use one single cuda stream
 #define XSCHED_CUDA_LV3_IMPL_ENV_NAME                  "XSCHED_CUDA_LV3_IMPL"                  // = str[TSG/TRAP], default = TRAP
+#define XSCHED_CUDA_NON_DEACTIVATABLE_KERNELS_ENV_NAME "XSCHED_CUDA_NON_DEACTIVATABLE_KERNELS" // comma-separated kernel symbol names that must not be deactivated
 #define XSCHED_LEVELZERO_SLICE_CNT_ENV_NAME            "XSCHED_LEVELZERO_SLICE_CNT"
 
 // For XSched server, the channel key is 1, which is often reserved for system process.

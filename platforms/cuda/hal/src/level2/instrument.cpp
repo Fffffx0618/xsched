@@ -215,6 +215,15 @@ uint64_t InstrumentManager::Reactivate()
 
 void InstrumentManager::Launch(std::shared_ptr<CudaKernelCommand> kernel, CUstream stream, XPreemptLevel level)
 {
+    // Kernels marked non-deactivatable (cooperative launches or explicit
+    // opt-out) must not be instrumented. The original launch path still
+    // programs a safe empty preempt buffer with killable == 0, so an
+    // unrelated trap cannot misclassify this kernel.
+    if (!kernel->GetProps(preempt::kCommandPropertyDeactivatable)) {
+        instrument_ctx_->Launch(kernel, stream, kKernelLaunchOriginal);
+        return;
+    }
+
     LaunchType launch_type = kKernelLaunchOriginal;
     if (level >= kPreemptLevelDeactivate) {
         launch_type = (int64_t)preempt_idx_ == kernel->GetIdx()

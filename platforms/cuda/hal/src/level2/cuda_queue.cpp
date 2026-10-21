@@ -1,6 +1,9 @@
+#include <mutex>
+
 #include "xsched/utils/xassert.h"
 #include "xsched/cuda/hal/level2/cuda_queue.h"
 #include "xsched/cuda/hal/common/cuda_assert.h"
+#include "xsched/cuda/hal/common/options.h"
 
 using namespace xsched::cuda;
 using namespace xsched::preempt;
@@ -43,6 +46,14 @@ void CudaQueueLv2::Reactivate(const preempt::CommandLog &log)
 void CudaQueueLv2::OnPreemptLevelChange(XPreemptLevel level)
 {
     XASSERT(level <= kPreemptLevelDeactivate, "unsupported level: %d", level);
+    if (level >= kPreemptLevelDeactivate && !GetCudaSingleStreamPerProcessEnabled()) {
+        static std::once_flag warned;
+        std::call_once(warned, []() {
+            XWARN("CUDA Level-2/3 with multiple application streams has known "
+                  "preemption interaction issues; set "
+                  "XSCHED_CUDA_SINGLE_STREAM_PER_PROCESS=ON for multi-stream workloads");
+        });
+    }
     level_ = level;
 }
 
@@ -61,7 +72,10 @@ void CudaQueueLv2::OnHwCommandSubmit(std::shared_ptr<preempt::HwCommand> hw_cmd)
         return;
     }
     auto kernel = std::dynamic_pointer_cast<CudaKernelCommand>(hw_cmd);
-    if (kernel != nullptr) instrument_manager_->Instrument(kernel);
+    if (kernel != nullptr &&
+        kernel->GetProps(preempt::kCommandPropertyDeactivatable)) {
+        instrument_manager_->Instrument(kernel);
+    }
 }
 
 CUresult CudaQueueLv2::DirectLaunch(std::shared_ptr<CudaKernelCommand> kernel,

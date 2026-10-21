@@ -46,6 +46,7 @@ library path when needed:
 | ------------------------------ | ------ | -------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
 | XSCHED_CUDA_SINGLE_STREAM_PER_PROCESS | string | ON/OFF | OFF | Use one internal CUDA stream per process. |
 | XSCHED_CUDA_LV3_IMPL           | string | TSG/TRAP       | TRAP          | Preemption method of Level-3 XQueue for CUDA. |
+| XSCHED_CUDA_NON_DEACTIVATABLE_KERNELS | string | comma-separated kernel symbols | (empty) | Kernels that must not be deactivated (e.g. cooperative or persistent kernels). They are launched through the original path without a guardian, so Level-2 waits for them instead of preempting them. |
 
 ## Level Zero XQueue-Specific Configuration
 

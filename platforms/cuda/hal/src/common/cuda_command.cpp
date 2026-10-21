@@ -10,8 +10,8 @@
 
 using namespace xsched::cuda;
 
-CudaCommand::CudaCommand(preempt::XCommandProperties props)
-    : HwCommand(GetCudaLv3Implementation() == kCudaLv3ImplementationTsg
+CudaCommand::CudaCommand(preempt::XCommandProperties props, bool force_deactivatable)
+    : HwCommand(force_deactivatable && GetCudaLv3Implementation() == kCudaLv3ImplementationTsg
                 ? props | preempt::kCommandPropertyDeactivatable : props)
 {
     CUDA_ASSERT(Driver::CtxGetCurrent(&ctx_));
@@ -51,8 +51,26 @@ CUresult CudaCommand::LaunchWrapper(CUstream stream)
     return ret;
 }
 
-CudaKernelCommand::CudaKernelCommand(CUfunction func, void **params, void **extra, bool deep_copy)
-    : CudaCommand(preempt::kCommandPropertyDeactivatable)
+static xsched::preempt::XCommandProperties ResolveKernelProps(CUfunction func,
+                                                              xsched::preempt::XCommandProperties props)
+{
+    if (!(props & xsched::preempt::kCommandPropertyDeactivatable)) return props;
+    if (!HasCudaNonDeactivatableKernels()) return props;
+
+    CUcontext ctx = nullptr;
+    if (Driver::CtxGetCurrent(&ctx) != CUDA_SUCCESS || ctx == nullptr) return props;
+    const char *name = nullptr;
+    cuXtraGetFunctionName(ctx, func, &name);
+    if (name != nullptr && IsCudaKernelNonDeactivatable(name)) {
+        XDEBG("kernel %s is configured as non-deactivatable", name);
+        return xsched::preempt::kCommandPropertyNone;
+    }
+    return props;
+}
+
+CudaKernelCommand::CudaKernelCommand(CUfunction func, void **params, void **extra,
+                                     bool deep_copy, preempt::XCommandProperties props)
+    : CudaCommand(ResolveKernelProps(func, props), false)
     // cuXtraKernelGetFunction() will convert func to CUfunction if func is a CUkernel.
     , kFunc(func), kFuncHandle(cuXtraKernelGetFunction((CUkernel)func))
     , params_(params), extra_(extra), param_cnt_(cuXtraGetParamCount(kFuncHandle))
@@ -128,9 +146,23 @@ CudaKernelCommand::~CudaKernelCommand()
     if (extra_) free(extra_);
 }
 
+static bool IsCooperativeLaunch(const CUlaunchConfig *cfg)
+{
+    if (cfg == nullptr || cfg->attrs == nullptr) return false;
+    for (unsigned int i = 0; i < cfg->numAttrs; ++i) {
+        if (cfg->attrs[i].id == CU_LAUNCH_ATTRIBUTE_COOPERATIVE &&
+            cfg->attrs[i].value.cooperative) {
+            return true;
+        }
+    }
+    return false;
+}
+
 CudaKernelLaunchExCommand::CudaKernelLaunchExCommand(const CUlaunchConfig *cfg, CUfunction func,
                                                      void **params, void **extra, bool deep_copy)
-    : CudaKernelCommand(func, params, extra, deep_copy)
+    : CudaKernelCommand(func, params, extra, deep_copy,
+                        IsCooperativeLaunch(cfg) ? preempt::kCommandPropertyNone
+                                                 : preempt::kCommandPropertyDeactivatable)
 {
     if (cfg == nullptr) {
         XWARN("CUlaunchConfig of %p is nullptr", func);

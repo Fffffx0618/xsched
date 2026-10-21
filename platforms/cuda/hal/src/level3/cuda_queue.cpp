@@ -51,8 +51,12 @@ void CudaQueueLv3Trap::OnHwCommandSubmit(std::shared_ptr<preempt::HwCommand> hw_
         return;
     }
     auto kernel = std::dynamic_pointer_cast<CudaKernelCommand>(hw_cmd);
-    // TODO: assign kernel_command->killable
-    if (kernel != nullptr) kernel->killable = true;
+    // Non-deactivatable kernels are launched through the original path with
+    // killable == 0, so the trap handler leaves them alone.
+    if (kernel != nullptr &&
+        kernel->GetProps(preempt::kCommandPropertyDeactivatable)) {
+        kernel->killable = true;
+    }
 }
 
 CudaQueueLv3Tsg::CudaQueueLv3Tsg(CUstream stream): CudaQueueLv1(stream)

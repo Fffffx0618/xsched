@@ -26,7 +26,7 @@ namespace xsched::cuda
 class CudaCommand : public preempt::HwCommand
 {
 public:
-    CudaCommand(preempt::XCommandProperties props);
+    CudaCommand(preempt::XCommandProperties props, bool force_deactivatable = true);
     virtual ~CudaCommand();
     virtual void Synchronize() override;
     virtual bool Synchronizable() override;
@@ -44,7 +44,8 @@ private:
 class CudaKernelCommand : public CudaCommand
 {
 public:
-    CudaKernelCommand(CUfunction func, void **params, void **extra, bool deep_copy);
+    CudaKernelCommand(CUfunction func, void **params, void **extra, bool deep_copy,
+                      preempt::XCommandProperties props = preempt::kCommandPropertyDeactivatable);
     virtual ~CudaKernelCommand();
     virtual unsigned int BlockCnt() const = 0;
 
@@ -78,8 +79,9 @@ public:
     CudaKernelLaunchCommand(CUfunction func,
                             unsigned int gdx, unsigned int gdy, unsigned int gdz,
                             unsigned int bdx, unsigned int bdy, unsigned int bdz,
-                            unsigned int shm, void **params, void **extra, bool deep_copy)
-        : CudaKernelCommand(func, params, extra, deep_copy)
+                            unsigned int shm, void **params, void **extra, bool deep_copy,
+                            preempt::XCommandProperties props = preempt::kCommandPropertyDeactivatable)
+        : CudaKernelCommand(func, params, extra, deep_copy, props)
         , gdx_(gdx), gdy_(gdy), gdz_(gdz), bdx_(bdx), bdy_(bdy), bdz_(bdz), shm_(shm) {}
     virtual ~CudaKernelLaunchCommand() = default;
     virtual unsigned int BlockCnt() const override { return gdx_ * gdy_ * gdz_; }
