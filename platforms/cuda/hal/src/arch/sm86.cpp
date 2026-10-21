@@ -126,18 +126,20 @@ void GuardianSM86::GetGuardianInstructions(const void **guardian_instr, size_t *
     *size = sizeof(guardian_instructions);
 }
 
+// The resume path reads the per-block restore flag written by the
+// preempted launch. Use the same L1-bypassing load as the guardian.
 void GuardianSM86::GetResumeInstructions(const void **resume_instr, size_t *size)
 {
     static const uint64_t resume_instructions[] =
     {
-        0x0000013000007945,
+        0x0000012000007945,
         0x000fe40003800000,
-        0x0000000000007919,
-        0x000e220000002500,
         0x00062000ff047b82,
         0x000fc00000000800,
         0x00062100ff057b82,
         0x000fc00000000800,
+        0x0000000000007919,
+        0x000e280000002500,
         0x0000000000037919,
         0x000e280000002600,
         0x0000000000077919,
@@ -150,8 +152,8 @@ void GuardianSM86::GetResumeInstructions(const void **resume_instr, size_t *size
         0x000fca00078e08ff,
         0x0000000403047825,
         0x000fca00078e0004,
-        0x0000000004007980,
-        0x000ea40000100900,
+        0x0000000004007381,
+        0x000ea400001ee900,
         0x000000ff0000720c,
         0x004fda0003f05270,
         0x000000000000894d,
@@ -166,34 +168,10 @@ void GuardianSM86::GetResumeInstructions(const void **resume_instr, size_t *size
         0x000fc00000000800,
         0x00062300ff157b82,
         0x000fc00000000800,
-        0x0000000000007947,
-        0x000fea0003800000,
         0x0000000000007941,
         0x000fea0003800000,
         0x0000000014007950,
         0x001fea0003e00000,
-        0xfffffff000007947,
-        0x000fc0000383ffff,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
-        0x0000000000007918,
-        0x000fc00000000000,
     };
     *resume_instr = resume_instructions;
     *size = sizeof(resume_instructions);

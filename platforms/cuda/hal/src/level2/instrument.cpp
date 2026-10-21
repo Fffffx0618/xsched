@@ -180,8 +180,11 @@ InstrumentManager::InstrumentManager(CUcontext ctx, CUdevice dev)
  */
 void InstrumentManager::Deactivate()
 {
-    // set global_exit_flag to 1
+    // set global_exit_flag to 1, and wait until the write is visible.
+    // The guardian runs on a different stream; without this synchronization a
+    // short kernel can finish before the flag reaches device memory.
     CUDA_ASSERT(Driver::MemsetD32Async(preempt_buf_ptr_, 1, 1, op_stream_));
+    CUDA_ASSERT(Driver::StreamSynchronize(op_stream_));
 }
 
 uint64_t InstrumentManager::Reactivate()

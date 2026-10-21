@@ -162,7 +162,7 @@ INJECT_FUNC void restore_exec(uint32_t *preempt_buffer_addr)    // R4 @ c[0x0][0
     uint32_t block_idx = get_blockid();
     uint32_t *block_restore_flag = &preempt_buffer_addr[2 * block_idx + 5];
 
-    if (*block_restore_flag == 0) exit();
+    if (load_preempt_flag(block_restore_flag) == 0) exit();
 
     __syncthreads();
     *block_restore_flag = 0;
