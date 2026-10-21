@@ -40,6 +40,39 @@ INJECT_FUNC void relocate_func_call(uint64_t func_addr)
  * |<------- uint32 ------->|<--- 32 bits -->|<---- uint64 ----->|<--------- uint32 --------->|<----------- uint32 ---------->|<------ ... ------>|
  * |<-- global_exit_flag -->|<-- reserved -->|<-- preempt_idx -->|<-- exit_flag_of_block_0 -->|<-- restore_flag_of_block_0 -->|<-- block_1 ... -->|
  */
+
+// On sm80+ the preempt buffer is written by the host (cuMemsetD32Async) while
+// kernels are already running. A plain generic load may be served from the
+// SM's L1 and never observe that write, so the guardian must bypass L1.
+// ld.global.cg does exactly that (it is lowered to LDG.E.STRONG.GPU on sm86).
+__device__ __forceinline__ uint32_t load_preempt_flag(const uint32_t *p)
+{
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+    uint64_t g;
+    uint32_t v;
+    asm volatile("cvta.to.global.u64 %0, %1;" : "=l"(g) : "l"(p));
+    asm volatile("ld.global.cg.u32 %0, [%1];" : "=r"(v) : "l"(g) : "memory");
+    return v;
+#else
+    return *p;
+#endif
+}
+
+__device__ __forceinline__ uint64_t load_preempt_idx(const uint64_t *p)
+{
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+    uint64_t g, v;
+    asm volatile("cvta.to.global.u64 %0, %1;" : "=l"(g) : "l"(p));
+    asm volatile("ld.global.cg.u64 %0, [%1];" : "=l"(v) : "l"(g) : "memory");
+    return v;
+#else
+    return *p;
+#endif
+}
+
+// NOTE: ptxas does not allow absolute constant-bank addresses, so the nop()
+// slots below still have to be patched to the debugger-parameter LDCs in the
+// generated SASS (see inject_sm86.asm and sm86.cpp).
 INJECT_FUNC void check_preempt(uint32_t *preempt_buffer_addr,   // R4 @ c[0x0][0x1880], R5 @ c[0x0][0x1884]
                                uint64_t kernel_idx)             // R6 @ c[0x0][0x1890], R7 @ c[0x0][0x1894]
 {
@@ -55,7 +88,7 @@ INJECT_FUNC void check_preempt(uint32_t *preempt_buffer_addr,   // R4 @ c[0x0][0
 
     if ((threadIdx.x | threadIdx.y | threadIdx.z) != 0) goto sync;
 
-    if (!*global_exit_flag) {
+    if (!load_preempt_flag(global_exit_flag)) {
         *block_exit_flag = 0;
         goto fence;
     }
@@ -63,7 +96,7 @@ INJECT_FUNC void check_preempt(uint32_t *preempt_buffer_addr,   // R4 @ c[0x0][0
     nop(); // LDC R6, c[0x0][0x1890];
     nop(); // LDC R7, c[0x0][0x1894];
     *block_exit_flag = 1;
-    preempt_idx = *preempt_idx_ptr;
+    preempt_idx = load_preempt_idx(preempt_idx_ptr);
     if (preempt_idx == 0) goto save_preempt_idx;
     if (preempt_idx == kernel_idx) goto save_restore_flag;
     goto fence;

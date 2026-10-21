@@ -7,20 +7,24 @@ using namespace xsched::cuda;
 
 #define INSTR_LEN 16
 
+// The preempt buffer is written by the host while kernels are already
+// running. On sm86 a plain generic load is served from the SM's L1 and
+// may never observe that write, so the guardian loads the exit flag and
+// preempt index with cvta.to.global + ld.global.cg (LDG.E.STRONG.GPU).
 void GuardianSM86::GetGuardianInstructions(const void **guardian_instr, size_t *size)
 {
     static const uint64_t guardian_instructions[] = 
     {
         0x0000034000007945,
         0x000fe40003800000,
-        0x0000000000087919,
-        0x000e220000002200,
         0x00062000ff047b82,
         0x000fc00000000800,
         0x00062100ff057b82,
         0x000fc00000000800,
-        0x0000029000017945,
-        0x000fe20003800000,
+        0x0000000000087919,
+        0x000e220000002200,
+        0x000002e000017945,
+        0x000fe60003800000,
         0x00000000000b7919,
         0x000e280000002100,
         0x00000000000a7919,
@@ -43,24 +47,24 @@ void GuardianSM86::GetGuardianInstructions(const void **guardian_instr, size_t *
         0x000fe200078e0004,
         0x000001d000000947,
         0x000fea0003800000,
-        0x0000000004007980,
-        0x000ea20000100900,
+        0x0000000004007381,
+        0x000ea200001ee900,
         0x0000016000027945,
         0x000fe20003800000,
         0x000000ff0000720c,
         0x004fda0003f05270,
         0x0000012000008947,
         0x000fea0003800000,
-        0x00000001ff037424,
-        0x000fe200078e00ff,
         0x00062400ff067b82,
         0x000fc00000000800,
         0x00062500ff077b82,
         0x000fc00000000800,
+        0x00000001ff037424,
+        0x000fca00078e00ff,
         0x0000000008007385,
         0x0001e80000100903,
-        0x00000008040a7980,
-        0x000ea20000100b00,
+        0x00000800040a7381,
+        0x000ea200001eeb00,
         0x000000a000037945,
         0x000fe20003800000,
         0x000000ff0a00720c,
@@ -101,8 +105,6 @@ void GuardianSM86::GetGuardianInstructions(const void **guardian_instr, size_t *
         0x000fe20000000800,
         0x0000000000007992,
         0x000fec0000000000,
-        0x0000000000017941,
-        0x000fea0003800000,
         0xffffffff00007948,
         0x000fe20003800000,
         0x0000000000007b1d,
@@ -111,10 +113,12 @@ void GuardianSM86::GetGuardianInstructions(const void **guardian_instr, size_t *
         0x003ea40000100900,
         0x000000ff0800720c,
         0x004fda0003f05270,
-        0x0000001000008947,
+        0x000000000000094d,
         0x000fea0003800000,
-        0x000000000000794d,
+        0x0000000000017941,
         0x000fea0003800000,
+        0xffffffff00007948,
+        0x000fe20003800000,
         0x0000000000007941,
         0x000fea0003800000,
     };
