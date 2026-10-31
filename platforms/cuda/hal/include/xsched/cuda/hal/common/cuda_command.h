@@ -6,6 +6,7 @@
 #include "xsched/cuda/hal/common/cuda.h"
 #include "xsched/cuda/hal/common/driver.h"
 #include "xsched/cuda/hal/common/cuda_assert.h"
+#include "xsched/cuda/hal/common/host_buffer_pool.h"
 
 namespace xsched::cuda
 {
@@ -67,6 +68,8 @@ protected:
     void **extra_ = nullptr;
 
 private:
+    CudaKernelCommand(CUfunction func, void **params, void **extra, bool deep_copy,
+                      preempt::XCommandProperties props, CUfunction function);
     size_t param_cnt_ = 0;
     char *param_data_ = nullptr;
     char *extra_data_ = nullptr;
@@ -188,8 +191,8 @@ public:
         );
         if (res == CUDA_SUCCESS && type == CU_MEMORYTYPE_HOST) return; // pinned host memory
         /// FIXME: Do not copy DEVICE/ARRAY/UNIFIED memory
-        void *pinned_host = nullptr;
-        CUDA_ASSERT(Driver::MemAllocHost_v2(&pinned_host, ByteCount));
+        host_pool_ = HostBufferPool::Instance(GetContext());
+        void *pinned_host = host_pool_->Acquire(ByteCount);
         srcHost_ = pinned_host;
         src_host_allocated_ = true;
         memcpy(pinned_host, srcHost, ByteCount);
@@ -197,7 +200,12 @@ public:
     virtual ~CudaMemcpyHtoDV2Command()
     {
         if (!src_host_allocated_) return;
-        CUDA_ASSERT(Driver::MemFreeHost((void *)srcHost_));
+        // Only non-deactivatable commands completed by the queue may recycle
+        // staging memory. Direct/in-flight commands retain MemFreeHost's
+        // synchronization behavior, and TSG-deactivatable copies do not reuse it.
+        const bool reusable = GetState() == preempt::kCommandStateCompleted &&
+            !GetProps(preempt::kCommandPropertyDeactivatable);
+        host_pool_->Release((void *)srcHost_, ByteCount_, reusable);
     };
 
 private:
@@ -205,6 +213,7 @@ private:
     const void *srcHost_;
     size_t ByteCount_;
     bool src_host_allocated_ = false;
+    std::shared_ptr<HostBufferPool> host_pool_;
 
     virtual CUresult Launch(CUstream stream) override
     {

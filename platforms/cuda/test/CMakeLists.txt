@@ -51,6 +51,9 @@ foreach(CUDART_MAIN_SRC ${CUDART_MAIN_SRCS})
         preempt
         halcuda
     )
+    if(CUDART_TARGET STREQUAL "level3_guard")
+        target_link_libraries(${CUDART_TARGET} PRIVATE cuxtra)
+    endif()
     set_target_properties(${CUDART_TARGET} PROPERTIES
         INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib
         BUILD_WITH_INSTALL_RPATH TRUE

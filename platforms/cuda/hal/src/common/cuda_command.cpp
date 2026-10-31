@@ -51,6 +51,29 @@ CUresult CudaCommand::LaunchWrapper(CUstream stream)
     return ret;
 }
 
+static CUfunction ResolveFunctionHandle(CUfunction func)
+{
+    static const int version = []() {
+        int value;
+        CUDA_ASSERT(Driver::DriverGetVersion(&value));
+        return value;
+    }();
+    // Context-independent CUkernel handles were introduced in CUDA 12.
+    if (version < 12000) return func;
+
+    CUmodule module = nullptr;
+    CUresult status = Driver::FuncGetModule(&module, func);
+    if (status == CUDA_SUCCESS) return func;
+    // Do not reinterpret context or asynchronous execution errors as a handle type.
+    if (status != CUDA_ERROR_INVALID_HANDLE) CUDA_ASSERT(status);
+
+    // Passing a CUfunction to cuKernelGetFunction can crash inside the driver.
+    // Only attempt this conversion after ruling out a CUfunction above.
+    CUfunction function = nullptr;
+    CUDA_ASSERT(Driver::KernelGetFunction(&function, (CUkernel)func));
+    return function;
+}
+
 static xsched::preempt::XCommandProperties ResolveKernelProps(CUfunction func,
                                                               xsched::preempt::XCommandProperties props)
 {
@@ -70,9 +93,14 @@ static xsched::preempt::XCommandProperties ResolveKernelProps(CUfunction func,
 
 CudaKernelCommand::CudaKernelCommand(CUfunction func, void **params, void **extra,
                                      bool deep_copy, preempt::XCommandProperties props)
-    : CudaCommand(ResolveKernelProps(func, props), false)
-    // cuXtraKernelGetFunction() will convert func to CUfunction if func is a CUkernel.
-    , kFunc(func), kFuncHandle(cuXtraKernelGetFunction((CUkernel)func))
+    : CudaKernelCommand(func, params, extra, deep_copy, props, ResolveFunctionHandle(func))
+{}
+
+CudaKernelCommand::CudaKernelCommand(CUfunction func, void **params, void **extra,
+                                     bool deep_copy, preempt::XCommandProperties props,
+                                     CUfunction function)
+    : CudaCommand(ResolveKernelProps(function, props), false)
+    , kFunc(func), kFuncHandle(function)
     , params_(params), extra_(extra), param_cnt_(cuXtraGetParamCount(kFuncHandle))
 {
     if (!deep_copy) return;

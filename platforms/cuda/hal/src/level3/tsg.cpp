@@ -1,9 +1,21 @@
+#include <chrono>
+#include <cstdio>
 #include <map>
 #include <mutex>
 #include <cuxtra/cuxtra.h>
 
 #include "xsched/cuda/hal/level3/tsg.h"
 #include "xsched/cuda/hal/common/cuda_assert.h"
+
+#ifndef XSCHED_TSG_DIAG
+#define XSCHED_TSG_DIAG 0
+#endif
+#if XSCHED_TSG_DIAG
+#define XSCHED_DIAG(...) std::fprintf(stderr, __VA_ARGS__)
+#else
+#define XSCHED_DIAG(...) ((void)0)
+#endif
+
 
 using namespace xsched::cuda;
 
@@ -20,14 +32,27 @@ TsgContext::TsgContext(CUcontext ctx): kCtx(ctx), interrupt_count_(0)
 
 void TsgContext::Interrupt()
 {
-    size_t cnt = interrupt_count_.fetch_add(1);
-    if (cnt == 0) cuXtraSetTimeslice(kCtx, 0);
+    using namespace std::chrono;
+    [[maybe_unused]] auto t0 = steady_clock::now();
+    std::lock_guard<std::mutex> lock(state_mtx_);
+    if (interrupt_count_ == 0) cuXtraSetTimeslice(kCtx, 0);
+    ++interrupt_count_;
+    [[maybe_unused]] auto us = duration<double, std::micro>(steady_clock::now()-t0).count();
+    XSCHED_DIAG("TSG_DIAG interrupt ctx=%p count=%zu dur_us=%.3f\n",
+                 (void*)kCtx, (size_t)interrupt_count_, us);
 }
 
 void TsgContext::Restore()
 {
-    size_t cnt = interrupt_count_.fetch_sub(1);
-    if (cnt == 1) cuXtraSetTimeslice(kCtx, timeslice_);
+    using namespace std::chrono;
+    [[maybe_unused]] auto t0 = steady_clock::now();
+    std::lock_guard<std::mutex> lock(state_mtx_);
+    XASSERT(interrupt_count_ > 0, "unbalanced TSG restore for context %p", kCtx);
+    if (interrupt_count_ == 1) cuXtraSetTimeslice(kCtx, timeslice_);
+    --interrupt_count_;
+    [[maybe_unused]] auto us = duration<double, std::micro>(steady_clock::now()-t0).count();
+    XSCHED_DIAG("TSG_DIAG restore ctx=%p count=%zu dur_us=%.3f\n",
+                 (void*)kCtx, (size_t)interrupt_count_, us);
 }
 
 std::shared_ptr<TsgContext> TsgContext::Instance(CUcontext ctx)

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include <atomic>
+#include <mutex>
 
 #include "xsched/cuda/hal/common/cuda.h"
 
@@ -21,7 +21,8 @@ public:
 private:
     const CUcontext kCtx;
     size_t timeslice_ = 0;
-    std::atomic<size_t> interrupt_count_;
+    std::mutex state_mtx_;
+    size_t interrupt_count_;
 };
 
 } // namespace xsched::cuda

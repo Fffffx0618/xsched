@@ -1,3 +1,5 @@
+#include <chrono>
+#include <cstdio>
 #include <mutex>
 #include <cstring>
 #include <unordered_map>
@@ -8,6 +10,16 @@
 #include "xsched/cuda/hal/common/driver.h"
 #include "xsched/cuda/hal/common/cuda_assert.h"
 #include "xsched/cuda/hal/level2/instrument.h"
+
+#ifndef XSCHED_TSG_DIAG
+#define XSCHED_TSG_DIAG 0
+#endif
+#if XSCHED_TSG_DIAG
+#define XSCHED_DIAG(...) std::fprintf(stderr, __VA_ARGS__)
+#else
+#define XSCHED_DIAG(...) ((void)0)
+#endif
+
 
 using namespace xsched::cuda;
 using namespace xsched::preempt;
@@ -180,21 +192,30 @@ InstrumentManager::InstrumentManager(CUcontext ctx, CUdevice dev)
  */
 void InstrumentManager::Deactivate()
 {
+    using namespace std::chrono;
+    [[maybe_unused]] auto t0 = steady_clock::now();
     // set global_exit_flag to 1, and wait until the write is visible.
     // The guardian runs on a different stream; without this synchronization a
     // short kernel can finish before the flag reaches device memory.
     CUDA_ASSERT(Driver::MemsetD32Async(preempt_buf_ptr_, 1, 1, op_stream_));
     CUDA_ASSERT(Driver::StreamSynchronize(op_stream_));
+    [[maybe_unused]] auto us = duration<double, std::micro>(steady_clock::now()-t0).count();
+    XSCHED_DIAG("L2_DIAG deactivate dur_us=%.3f\n", us);
 }
 
 uint64_t InstrumentManager::Reactivate()
 {
+    using namespace std::chrono;
+    [[maybe_unused]] auto t0 = steady_clock::now();
     // read preempt_idx from preempt buffer
     CUDA_ASSERT(Driver::MemcpyDtoHAsync_v2(&preempt_idx_, preempt_buf_ptr_ + sizeof(uint64_t),
                                            sizeof(uint64_t), op_stream_));
     // clear the header of preempt buffer
     CUDA_ASSERT(Driver::MemsetD8Async(preempt_buf_ptr_, 0, 2 * sizeof(uint64_t), op_stream_));
     CUDA_ASSERT(Driver::StreamSynchronize(op_stream_));
+    [[maybe_unused]] auto us = duration<double, std::micro>(steady_clock::now()-t0).count();
+    XSCHED_DIAG("L2_DIAG reactivate dur_us=%.3f idx=%llu\n", us,
+                 (unsigned long long)preempt_idx_);
 
 #define MAX_DEBUG_BLOCK_SIZE    1024
 #define PREEMPT_BUFFER_DEBUG    false

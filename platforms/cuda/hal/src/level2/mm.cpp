@@ -128,8 +128,18 @@ InstrMemAllocator::~InstrMemAllocator()
 {
     CUcontext ctx = nullptr; // check if cuda driver has deinitialized
     if (Driver::CtxGetCurrent(&ctx) == CUDA_ERROR_DEINITIALIZED) return;
-    XASSERT(ctx == ctx_, "current context %p mismatch InstrMemAllocator context %p", ctx, ctx_);
+    // Context registries may outlive an explicitly destroyed CUDA context.
+    // Its instruction allocations have already been released by the driver.
+    // A different current context is also valid during process teardown.
+    const bool push = ctx != ctx_;
+    if (push) {
+        CUresult status = Driver::CtxPushCurrent_v2(ctx_);
+        if (status == CUDA_ERROR_DEINITIALIZED || status == CUDA_ERROR_INVALID_CONTEXT ||
+            status == CUDA_ERROR_CONTEXT_IS_DESTROYED) return;
+        CUDA_ASSERT(status);
+    }
     for (auto block : blocks_) cuXtraInstrMemBlockFree(ctx_, block);
+    if (push) CUDA_ASSERT(Driver::CtxPopCurrent_v2(&ctx));
 }
 
 CUdeviceptr InstrMemAllocator::Alloc(size_t size)

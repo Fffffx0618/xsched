@@ -16,8 +16,9 @@ xsched::cuda::CudaLv3Implementation xsched::cuda::GetCudaLv3Implementation()
 {
     static const CudaLv3Implementation impl = []()->CudaLv3Implementation {
         const std::string str = GetEnv(XSCHED_CUDA_LV3_IMPL_ENV_NAME);
-        if (str.empty()) return kCudaLv3ImplementationTrap;
+        if (str.empty() || str == "TRAP") return kCudaLv3ImplementationTrap;
         if (str == "TSG") return kCudaLv3ImplementationTsg;
+        if (str == "GATE") return kCudaLv3ImplementationGate;
         XWARN("unknown CUDA Level-3 implementation: %s, use default (TRAP)", str.c_str());
         return kCudaLv3ImplementationTrap;
     }();
@@ -53,4 +54,24 @@ bool xsched::cuda::HasCudaNonDeactivatableKernels()
 bool xsched::cuda::IsCudaKernelNonDeactivatable(const std::string &name)
 {
     return GetNonDeactivatableKernels().count(name) > 0;
+}
+
+bool xsched::cuda::IsCudaKernelTrapReplaySafe(const std::string &name)
+{
+    static const auto safe = []() {
+        std::unordered_set<std::string> result;
+        const std::string value = GetEnv("XSCHED_CUDA_TRAP_REPLAY_SAFE_KERNELS");
+        for (size_t begin = 0; begin <= value.size();) {
+            size_t end = value.find(',', begin);
+            if (end == std::string::npos) end = value.size();
+            size_t left = begin, right = end;
+            while (left < right && std::isspace(static_cast<unsigned char>(value[left]))) ++left;
+            while (right > left && std::isspace(static_cast<unsigned char>(value[right - 1]))) --right;
+            if (right > left) result.emplace(value.substr(left, right - left));
+            if (end == value.size()) break;
+            begin = end + 1;
+        }
+        return result;
+    }();
+    return safe.count(name) != 0;
 }

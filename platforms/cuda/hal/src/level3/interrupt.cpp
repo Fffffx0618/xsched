@@ -28,11 +28,8 @@ InterruptContext::InterruptContext(CUcontext ctx)
 
 void InterruptContext::InstrumentTrapHandler()
 {
-    static std::mutex init_mtx;
-    static bool initialized = false;
-    std::lock_guard<std::mutex> lock(init_mtx);
-    if (initialized) return;
-    initialized = true;
+    std::lock_guard<std::mutex> lock(instrument_mtx_);
+    if (instrumented_) return;
 
     // used for debugging
     // DumpTrapHandler();
@@ -58,10 +55,12 @@ void InterruptContext::InstrumentTrapHandler()
     cuXtraInvalInstrCache(kCtx);
     free(trap_handler_host);
     free(inject_host);
+    instrumented_ = true;
 }
 
 void InterruptContext::Interrupt()
 {
+    std::lock_guard<std::mutex> lock(interrupt_mtx_);
     cuXtraTriggerTrap(kCtx);
 }
 

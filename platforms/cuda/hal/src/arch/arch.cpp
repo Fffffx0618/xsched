@@ -60,6 +60,9 @@ std::shared_ptr<HwQueue> xsched::cuda::CudaQueueCreate(CUstream stream)
     if (GetCudaLv3Implementation() == kCudaLv3ImplementationTsg) {
         return std::make_shared<CudaQueueLv3Tsg>(stream);
     }
+    if (GetCudaLv3Implementation() == kCudaLv3ImplementationGate) {
+        return std::make_shared<CudaQueueLv3Gate>(stream);
+    }
 
     CUdevice dev;
     CUcontext stream_ctx;
@@ -89,10 +92,6 @@ CUresult xsched::cuda::DirectLaunch(std::shared_ptr<CudaKernelCommand> kernel, C
     return CudaQueueLv1::DirectLaunch(kernel, stream);
 #endif
 
-    if (GetCudaLv3Implementation() == kCudaLv3ImplementationTsg) {
-        return CudaQueueLv3Tsg::DirectLaunch(kernel, stream);
-    }
-
     CUdevice dev;
     CUcontext stream_ctx;
     CUcontext current_ctx;
@@ -102,6 +101,13 @@ CUresult xsched::cuda::DirectLaunch(std::shared_ptr<CudaKernelCommand> kernel, C
             "direct launch kernel failed: current context (%p) does not match stream context (%p)",
             current_ctx, stream_ctx);
     CUDA_ASSERT(Driver::CtxGetDevice(&dev));
+
+    if (GetCudaLv3Implementation() == kCudaLv3ImplementationTsg) {
+        return CudaQueueLv3Tsg::DirectLaunch(kernel, current_ctx, stream);
+    }
+    if (GetCudaLv3Implementation() == kCudaLv3ImplementationGate) {
+        return CudaQueueLv1::DirectLaunch(kernel, stream);
+    }
 
     switch (GetArch(dev)) {
     case 35:

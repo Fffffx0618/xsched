@@ -46,7 +46,13 @@ void CudaQueueLv2::Reactivate(const preempt::CommandLog &log)
 void CudaQueueLv2::OnPreemptLevelChange(XPreemptLevel level)
 {
     XASSERT(level <= kPreemptLevelDeactivate, "unsupported level: %d", level);
-    if (level >= kPreemptLevelDeactivate && !GetCudaSingleStreamPerProcessEnabled()) {
+    if (level >= kPreemptLevelDeactivate) WarnMultiStreamPreemption();
+    level_ = level;
+}
+
+void CudaQueueLv2::WarnMultiStreamPreemption()
+{
+    if (!GetCudaSingleStreamPerProcessEnabled()) {
         static std::once_flag warned;
         std::call_once(warned, []() {
             XWARN("CUDA Level-2/3 with multiple application streams has known "
@@ -54,7 +60,6 @@ void CudaQueueLv2::OnPreemptLevelChange(XPreemptLevel level)
                   "XSCHED_CUDA_SINGLE_STREAM_PER_PROCESS=ON for multi-stream workloads");
         });
     }
-    level_ = level;
 }
 
 void CudaQueueLv2::OnHwCommandSubmit(std::shared_ptr<preempt::HwCommand> hw_cmd)

@@ -23,6 +23,7 @@ CudaQueueLv1::CudaQueueLv1(CUstream stream): kStream(stream)
             "create CudaQueueLv1 failed: current context (%p) does not match stream context (%p)",
             current_context, stream_context);
     context_ = stream_context;
+    host_buffer_pool_ = HostBufferPool::Instance(context_);
 
     // get cuda device
     CUDA_ASSERT(Driver::CtxGetDevice(&cudevice_));
@@ -95,4 +96,9 @@ EXPORT_C_FUNC XResult CudaQueueCreate(HwQueueHandle *hwq, CUstream stream)
     auto res = HwQueueManager::Add(hwq_h, [&]() { return xsched::cuda::CudaQueueCreate(stream); });
     if (res == kXSchedSuccess) *hwq = hwq_h;
     return res;
+}
+
+bool CudaQueueLv1::QueryIdle()
+{
+    return Driver::StreamQuery(kStream) == CUDA_SUCCESS;
 }

@@ -366,3 +366,9 @@ std::unique_lock<MutexLock> LaunchWorker::SyncCmdWithLock(std::unique_lock<utils
 
     return lock;
 }
+
+size_t LaunchWorker::InflightCount()
+{
+    std::unique_lock<MutexLock> lock(*mtx_);
+    return cmd_log_.size();
+}

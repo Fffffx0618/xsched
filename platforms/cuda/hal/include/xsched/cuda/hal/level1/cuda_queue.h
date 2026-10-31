@@ -25,6 +25,8 @@ public:
     virtual HwQueueHandle GetHandle()            override { return GetHwQueueHandle(kStream); }
     virtual bool          SupportDynamicLevel()  override { return false; }
     virtual XPreemptLevel GetMaxSupportedLevel() override { return kPreemptLevelBlock; }
+    virtual bool QueryIdleSupported() override { return true; }
+    virtual bool QueryIdle() override;
 
 protected:
     const CUstream kStream;
@@ -33,6 +35,7 @@ protected:
     XDevice        xdevice_;
     CUcontext      context_ = nullptr;
     XPreemptLevel  level_ = kPreemptLevelUnknown;
+    std::shared_ptr<HostBufferPool> host_buffer_pool_;
 };
 
 } // namespace xsched::cuda

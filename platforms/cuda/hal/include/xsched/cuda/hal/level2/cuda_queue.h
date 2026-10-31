@@ -25,6 +25,7 @@ public:
     virtual XPreemptLevel GetMaxSupportedLevel() override { return kPreemptLevelDeactivate; }
 
 protected:
+    static void WarnMultiStreamPreemption();
     std::unique_ptr<InstrumentManager> instrument_manager_ = nullptr;
 };
 

@@ -76,6 +76,27 @@ __device__ __forceinline__ uint64_t load_preempt_idx(const uint64_t *p)
 INJECT_FUNC void check_preempt(uint32_t *preempt_buffer_addr,   // R4 @ c[0x0][0x1880], R5 @ c[0x0][0x1884]
                                uint64_t kernel_idx)             // R6 @ c[0x0][0x1890], R7 @ c[0x0][0x1894]
 {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 860
+    nop(); // LDC R4, c[0x0][0x1880];
+    nop(); // LDC R5, c[0x0][0x1884];
+    bool should_exit = false;
+    if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0 && load_preempt_flag(preempt_buffer_addr)) {
+        should_exit = true;
+        nop(); // LDC R6, c[0x0][0x1890];
+        nop(); // LDC R7, c[0x0][0x1894];
+        uint64_t *idx = (uint64_t *)&preempt_buffer_addr[2];
+        uint64_t previous = load_preempt_idx(idx);
+        if (previous == 0 || previous == kernel_idx) {
+            if (previous == 0) *idx = kernel_idx;
+            preempt_buffer_addr[2 * get_blockid() + 5] = 1;
+        }
+        __threadfence_block();
+    }
+    // All warps must make the same decision even when the host changes the
+    // flag during CTA startup. Reduce thread zero's decision at a CTA barrier
+    // instead of writing and reading the per-block global exit scratch flag.
+    if (__syncthreads_or(should_exit)) exit();
+#else
     nop(); // LDC R4, c[0x0][0x1880];
     nop(); // LDC R5, c[0x0][0x1884];
 
@@ -113,6 +134,7 @@ fence:
 sync:
     __syncthreads();
     if (*block_exit_flag != 0) exit();
+#endif
 }
 
 INJECT_FUNC void check_preempt_trap(uint32_t *preempt_buffer_addr,   // R4 @ c[0x0][0x1880], R5 @ c[0x0][0x1884]

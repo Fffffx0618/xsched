@@ -51,6 +51,13 @@ public:
     /// @param log In-flight but not completed HwCommands that have been launched on this HwQueue.
     virtual void Restore(const CommandLog &log) { UNUSED(log); }
 
+    /// @brief Whether the platform can report whether all launched work is complete.
+    virtual bool QueryIdleSupported() { return false; }
+    /// @brief Whether this queue implements the Lv2-interrupt fast path.
+    virtual bool SupportsInterruptFastPath() { return false; }
+    /// @brief Return true if all work launched on this HwQueue has completed.
+    virtual bool QueryIdle() { return false; }
+
     virtual XDevice GetDevice() = 0;
     virtual HwQueueHandle GetHandle() = 0;
     virtual bool SupportDynamicLevel() = 0;

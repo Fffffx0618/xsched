@@ -2,6 +2,10 @@
 
 #include <memory>
 #include <atomic>
+#include <condition_variable>
+#include <chrono>
+#include <mutex>
+#include <thread>
 
 #include "xsched/protocol/def.h"
 #include "xsched/preempt/xqueue/xqueue.h"
@@ -33,7 +37,21 @@ public:
     virtual void SetLaunchConfig(int64_t threshold, int64_t batch_size) override;
 
 private:
+    void StartWatchdog();
+    void StopWatchdog();
+    void ScheduleInterrupt(int64_t drain_us);
+    void CancelWatchdog();
+    void WatchdogLoop();
+
     XPreemptLevel level_;
+    std::mutex watch_mtx_;
+    std::condition_variable watch_cv_;
+    std::thread watch_thread_;
+    bool watch_stop_ = false;
+    bool watch_pending_ = false;
+    uint64_t watch_gen_ = 0;
+    std::chrono::steady_clock::time_point watch_deadline_;
+    bool interrupt_applied_ = false;  // guarded by watch_mtx_
     const std::shared_ptr<CommandBuffer> cmd_buf_ = nullptr;
     const std::shared_ptr<LaunchWorker> launch_worker_ = nullptr;
 
